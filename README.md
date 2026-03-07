@@ -30,10 +30,11 @@ flowchart TD
     StepUp -->|"No"| Allow
 ```
 
-Two layers work together:
+Three layers work together:
 
 1. **`session-init.sh`** runs at session start and injects model-awareness context so the AI itself knows when to suggest switching
 2. **`model-advisor.sh`** runs before every prompt, classifies the task, and blocks with a recommendation when you're on the wrong model
+3. **`track-completion.sh`** runs when the agent loop ends, logging task outcomes for accuracy analysis
 
 ## Quick Setup
 
@@ -47,7 +48,7 @@ mkdir -p ~/.cursor/hooks
 cp model-matchmaker/hooks/*.sh ~/.cursor/hooks/
 
 # 3. Make scripts executable
-chmod +x ~/.cursor/hooks/session-init.sh ~/.cursor/hooks/model-advisor.sh
+chmod +x ~/.cursor/hooks/*.sh
 
 # 4. Restart Cursor (or Claude Code)
 ```
@@ -66,18 +67,108 @@ Opus is also recommended for prompts over 200 words or analytical questions over
 
 The classifier is **conservative**: it only blocks when confidence is high. A false allow (wasting some money) is always better than a false block (interrupting your flow with a wrong recommendation).
 
-## Sample Log Output
+## Analytics
 
-Every decision is logged to `~/.cursor/hooks/model-advisor.log`:
+Model Matchmaker tracks every recommendation, override, and task completion in structured NDJSON logs at `~/.cursor/hooks/model-matchmaker.ndjson`.
+
+### What's Tracked
+
+| Event | Data Captured |
+|-------|--------------|
+| **Recommendation** | Model used, recommendation, action (ALLOW/BLOCK/OVERRIDE), conversation ID, prompt snippet (40 chars) |
+| **Override** | Same as recommendation, but action = OVERRIDE. Captures what was recommended vs. what you chose |
+| **Completion** | Task outcome (completed/errored/aborted), model used, conversation ID |
+
+Conversation IDs link recommendations to outcomes, so you can measure whether overriding the advisor led to better or worse results.
+
+### View Your Stats
+
+```bash
+# Summary dashboard
+./hooks/analytics.sh
+
+# Last 7 days only
+./hooks/analytics.sh --days 7
+
+# JSON output (for scripting/dashboards)
+./hooks/analytics.sh --json
+```
+
+Sample output:
 
 ```
-[2026-03-03 14:22:01] model=claude-4-opus rec=haiku action=BLOCK prompt="git commit all chang..."
-[2026-03-03 14:23:15] model=claude-4-opus rec=sonnet action=BLOCK prompt="build a new componen..."
-[2026-03-03 14:25:44] model=claude-4-sonnet rec=opus action=BLOCK prompt="evaluate the tradeof..."
-[2026-03-03 14:30:02] model=claude-4-sonnet rec=uncertain action=ALLOW prompt="what time zone is Ne..."
+==================================================
+  MODEL MATCHMAKER ANALYTICS
+  847 recommendations tracked
+==================================================
+
+  Actions:
+       ALLOW:  512 (60.4%)
+       BLOCK:  298 (35.2%)
+    OVERRIDE:   37 ( 4.4%)
+
+  Override rate: 4.4%
+  Block rate:    35.2%
+
+  Override breakdown (you disagreed):
+    claude-4-sonnet (rec: opus): 22
+    claude-4-opus (rec: haiku): 15
+
+  Task Outcomes (312 conversations):
+    Completed: 287
+    Errored:   18
+    Aborted:   7
+
+  Override Outcomes:
+    Completed after override: 33
+    Errored after override:   4
+==================================================
 ```
 
-The log only captures the first 20 characters of each prompt (for privacy) plus the model, recommendation, and whether it blocked or allowed. Useful for tuning the patterns to your workflow.
+A high override rate with good completion outcomes means the classifier needs tuning for your workflow. A high override rate with errors means the advisor was probably right.
+
+### Four-Tier Data Strategy
+
+Model Matchmaker gives you four levels of analytics, each with different privacy and sharing boundaries:
+
+**Tier 1: Automatic Local Logs (Default)**
+- Full NDJSON logs with all data: `~/.cursor/hooks/model-matchmaker.ndjson`
+- Includes: conversation IDs, prompt snippets (40 chars), model info, outcomes
+- **Privacy: Local only, never leaves your machine**
+- **Use case: Your personal workflow analysis**
+
+**Tier 2: Personal Optimization (`skills/optimize-classifier/SKILL.md`)** ⭐ Recommended
+- Analyzes your override patterns and auto-tunes your local classifier
+- Finds keywords from prompts where you disagreed with the advisor
+- Proposes changes to `model-advisor.sh` to match your preferences
+- **Privacy: Completely local, no data leaves your machine**
+- **Use case: Make your classifier learn from your overrides**
+- Run this after 50+ prompts and a few overrides to tune it to your workflow
+
+**Tier 3: Personal Dashboard (`analytics.sh`)**
+- Aggregated stats from your logs: override rate, completion outcomes, patterns
+- Run: `./hooks/analytics.sh` or `./hooks/analytics.sh --days 7`
+- **Privacy: Local only, no sharing**
+- **Use case: Track your own accuracy, identify classifier gaps**
+
+**Tier 4: Community Contribution (Optional, User-Reviewed)**
+- Sanitized report generated via Cursor skill: `skills/share-analytics/SKILL.md`
+- AI-powered sanitization: removes project names, file paths, personal details
+- Prompts → generic categories: "ui bug fix", "feature build", "API integration"
+- **Privacy: You review and approve before sharing**
+- **Use case: Help improve the classifier for everyone**
+- **Note: Not required for personal optimization** (use Tier 2 instead)
+
+The core workflow is: **Use Model Matchmaker → Review dashboard → Optimize locally → (Optionally) contribute anonymized data.**
+
+Most users will only need Tiers 1-3. Tier 4 is if you want to help improve the community classifier.
+
+### Privacy
+
+- Only the first 40 characters of each prompt are stored (for pattern analysis)
+- All data stays local in `~/.cursor/hooks/model-matchmaker.ndjson`
+- No network calls, no telemetry, no cloud storage
+- Delete the file anytime to clear your history
 
 ## Override
 
@@ -87,7 +178,64 @@ Prefix any prompt with `!` to bypass the advisor entirely:
 ! just do it on Opus, I know what I'm doing
 ```
 
-The hook returns immediately with no classification.
+The override is logged (so you can track accuracy) but the prompt goes through immediately with no blocking.
+
+## Troubleshooting
+
+### Hook Blocks Every Prompt (Exit Code 2 Error)
+
+**Symptom:** After installing or updating Model Matchmaker, every prompt gets silently blocked. You can't send any messages in Cursor.
+
+**Cause:** The `beforeSubmitPrompt` hook script has a syntax error (usually bash quoting issues) and exits with code 2, which Cursor interprets as "block this prompt."
+
+**Quick Fix:**
+1. Open `~/.cursor/hooks.json`
+2. Remove or comment out the `beforeSubmitPrompt` section:
+   ```json
+   {
+     "version": 1,
+     "hooks": {
+       "sessionStart": [
+         { "command": "./hooks/session-init.sh", "timeout": 2 }
+       ],
+       // "beforeSubmitPrompt": [
+       //   { "command": "./hooks/model-advisor.sh", "timeout": 2 }
+       // ],
+       "stop": [
+         { "command": "./hooks/track-completion.sh", "timeout": 2 }
+       ]
+     }
+   }
+   ```
+3. Restart Cursor (or just start a new composer session)
+
+**Root Cause & Prevention:**
+
+The `model-advisor.sh` script embeds Python code inside a bash `python3 -c '...'` heredoc. Certain Python string operations break bash's quoting:
+
+**BAD (breaks bash):**
+```python
+snippet = prompt[:40].replace("\n", " ").replace("\"", "'")
+# The \" inside single-quoted bash string confuses the parser
+```
+
+**GOOD (safe for bash):**
+```python
+snippet = prompt[:40].replace(chr(10), " ").replace(chr(34), chr(39))
+# Using chr() avoids all quoting conflicts
+```
+
+**General rule:** Inside `python3 -c '...'`, avoid:
+- Escaped double quotes (`\"`)
+- Backslash escapes (`\n`, `\t`, etc.) - use `chr()` instead
+- Single quotes in Python strings - use `chr(39)` or double quotes
+
+**Test your hook:**
+```bash
+echo '{"prompt":"test","model":"claude-4-opus"}' | bash ~/.cursor/hooks/model-advisor.sh
+```
+
+If you see `{"continue": true}` or `{"continue": false, "user_message": "..."}`, it's working. If you see bash errors, check your quoting.
 
 ## How This Compares to Other Solutions
 
@@ -135,9 +283,10 @@ Model Matchmaker runs entirely locally. No network calls, no proxy, no attack su
 
 - **Pure bash + python3** for JSON parsing. No external dependencies. python3 is pre-installed on macOS and most Linux.
 - **2-second timeout**. If the script hangs, Cursor proceeds normally (fail-open). You're never locked out.
-- **Local logging only**. Timestamp, model, recommendation, and a 20-char prompt snippet. No full prompts stored.
+- **Structured NDJSON logging**. Every event is a JSON line with conversation IDs for correlation. First 40 chars of prompt only.
 - **No LLM calls for classification**. Instant, free, deterministic. Keyword matching is fast and predictable.
 - **No network calls**. Everything is local string matching. Nothing leaves your machine.
+- **Override tracking**. When you bypass with `!`, the recommendation is still logged so you can measure classifier accuracy over time.
 
 ## Results
 
@@ -164,10 +313,58 @@ While this tool is configured for Claude models out-of-the-box, the routing logi
 ### Accuracy
 - **12/12 test prompts** from real sessions classified correctly after tuning
 - The log file has been the most interesting part - reviewing it reveals patterns you don't expect; most "build" prompts genuinely don't need Opus
+- Run `./hooks/analytics.sh` to see your personal accuracy metrics: override rate, completion outcomes after overrides, and recommendation distribution
 
 ## Contributing
 
 Open an issue or PR if you want to add patterns, tune the classifier, or add support for other editors. The keyword lists in `model-advisor.sh` are the main thing to tweak.
+
+### Writing Custom Hooks
+
+If you're extending Model Matchmaker or writing your own Cursor hooks, here are guidelines to avoid the bash quoting trap that can lock users out:
+
+**The Problem:** Hooks use `python3 -c '...'` to embed Python inside bash. The Python code runs inside a bash single-quoted string, so certain Python string operations break the quoting and cause exit code 2 (which Cursor interprets as "block this prompt").
+
+**Safe patterns:**
+
+```python
+# Use chr() for special characters instead of escape sequences
+newline = chr(10)   # instead of "\n"
+quote = chr(34)     # instead of "\""
+apostrophe = chr(39) # instead of "'"
+
+# Safe string operations
+snippet = text[:40].replace(chr(10), " ").replace(chr(34), chr(39))
+```
+
+**Unsafe patterns that break bash:**
+
+```python
+# These will cause syntax errors in the bash heredoc
+snippet = text[:40].replace("\n", " ")  # Backslash escapes break
+snippet = text[:40].replace("\"", "'")  # Escaped quotes break
+snippet = text[:40].replace('"', "'")   # Raw quotes break
+```
+
+**Testing your hook:**
+
+```bash
+# Test with sample input
+echo '{"prompt":"test message","model":"claude-4-opus"}' | bash ~/.cursor/hooks/your-hook.sh
+
+# Should output valid JSON like:
+# {"continue": true}
+# or
+# {"continue": false, "user_message": "Blocked because..."}
+
+# If you see bash errors like "unexpected EOF", you have quoting issues
+```
+
+**General principles:**
+- Use `chr()` for any character that could conflict with bash quoting
+- Avoid f-strings with quotes inside them
+- Test standalone before deploying to users
+- Remember: exit code 2 = block, exit code 0 = success, other codes = fail-open (prompt proceeds)
 
 ### Roadmap
 

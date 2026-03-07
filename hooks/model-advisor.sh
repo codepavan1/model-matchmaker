@@ -19,19 +19,27 @@ except:
 prompt = data.get("prompt", "")
 model = data.get("model", "").lower()
 attachments = data.get("attachments", [])
+conversation_id = data.get("conversation_id", "")
+generation_id = data.get("generation_id", "")
 
-if prompt.lstrip().startswith("!"):
-    print(json.dumps({"continue": True}))
-    sys.exit(0)
+is_override = prompt.lstrip().startswith("!")
 
-prompt_lower = prompt.lower()
-word_count = len(prompt.split())
+if is_override:
+    clean_prompt = prompt.lstrip()[1:].lstrip()
+else:
+    clean_prompt = prompt
+
+prompt_lower = clean_prompt.lower()
+word_count = len(clean_prompt.split())
 
 is_opus = "opus" in model
 is_sonnet = "sonnet" in model
 is_haiku = "haiku" in model
 
 if not (is_opus or is_sonnet or is_haiku):
+    if is_override:
+        print(json.dumps({"continue": True}))
+        sys.exit(0)
     print(json.dumps({"continue": True}))
     sys.exit(0)
 
@@ -44,7 +52,7 @@ opus_keywords = [
 ]
 
 has_opus_signal = any(kw in prompt_lower for kw in opus_keywords)
-is_long_analytical = word_count > 100 and "?" in prompt
+is_long_analytical = word_count > 100 and "?" in clean_prompt
 is_multi_paragraph = word_count > 200
 
 if has_opus_signal or is_long_analytical or is_multi_paragraph:
@@ -78,32 +86,47 @@ else:
 block = False
 message = ""
 
-if recommendation == "haiku" and (is_opus or is_sonnet):
-    block = True
-    if is_opus:
-        message = "This looks like a simple mechanical task (git, rename, format). Haiku handles these identically at ~90% less cost than Opus. Switch to Haiku and re-send. (Prefix with ! to override.)"
-    else:
-        message = "This looks like a simple mechanical task. Haiku handles these identically at ~80% less cost than Sonnet. Switch to Haiku and re-send. (Prefix with ! to override.)"
-elif recommendation == "sonnet" and is_opus:
-    block = True
-    message = "Standard implementation work. Sonnet handles this at ~80% less cost with the same quality. Switch to Sonnet and re-send. (Prefix with ! to override.)"
-elif recommendation == "opus" and (is_sonnet or is_haiku):
-    block = True
-    message = "This looks like architecture, deep analysis, or multi-system work. Switch to Opus for better results, then re-send. (Prefix with ! to override.)"
+if not is_override:
+    if recommendation == "haiku" and (is_opus or is_sonnet):
+        block = True
+        if is_opus:
+            message = "This looks like a simple mechanical task (git, rename, format). Haiku handles these identically at ~90% less cost than Opus. Switch to Haiku and re-send. (Prefix with ! to override.)"
+        else:
+            message = "This looks like a simple mechanical task. Haiku handles these identically at ~80% less cost than Sonnet. Switch to Haiku and re-send. (Prefix with ! to override.)"
+    elif recommendation == "sonnet" and is_opus:
+        block = True
+        message = "Standard implementation work. Sonnet handles this at ~80% less cost with the same quality. Switch to Sonnet and re-send. (Prefix with ! to override.)"
+    elif recommendation == "opus" and (is_sonnet or is_haiku):
+        block = True
+        message = "This looks like architecture, deep analysis, or multi-system work. Switch to Opus for better results, then re-send. (Prefix with ! to override.)"
+
+rec = recommendation if recommendation else "uncertain"
+action = "OVERRIDE" if is_override else ("BLOCK" if block else "ALLOW")
 
 try:
     log_dir = os.path.expanduser("~/.cursor/hooks")
-    log_path = os.path.join(log_dir, "model-advisor.log")
-    snippet = prompt[:20].replace("\n", " ") + ("..." if len(prompt) > 20 else "")
-    action = "BLOCK" if block else "ALLOW"
-    rec = recommendation if recommendation else "uncertain"
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "model-matchmaker.ndjson")
+    snippet = clean_prompt[:40].replace(chr(10), " ").replace(chr(34), chr(39))
+    entry = {
+        "event": "recommendation",
+        "ts": datetime.now().isoformat(),
+        "conversation_id": conversation_id,
+        "generation_id": generation_id,
+        "model": model,
+        "recommendation": rec,
+        "action": action,
+        "word_count": word_count,
+        "prompt_snippet": snippet,
+    }
     with open(log_path, "a") as f:
-        f.write(f"[{ts}] model={model} rec={rec} action={action} prompt=\"{snippet}\"\n")
+        f.write(json.dumps(entry) + "\n")
 except:
     pass
 
-if block:
+if is_override:
+    print(json.dumps({"continue": True}))
+elif block:
     print(json.dumps({"continue": False, "user_message": message}))
 else:
     out = {"continue": True}

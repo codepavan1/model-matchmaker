@@ -6,6 +6,9 @@
     ],
     "beforeSubmitPrompt": [
       { "command": "./hooks/model-advisor.sh", "timeout": 2 }
+    ],
+    "stop": [
+      { "command": "./hooks/track-completion.sh", "timeout": 2 }
     ]
   }
 }
