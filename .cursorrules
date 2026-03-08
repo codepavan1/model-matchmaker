@@ -31,7 +31,7 @@ Model Matchmaker is a local Cursor hook that classifies prompts before sending a
 - **Business planning** (strategy docs, roadmap justifications, partnerships)
 - **Personal drafts** (pre-write content, brainstorms, unfinished ideas)
 
-**All marketing/business content goes to:** `/Users/coybyron/Business Planning/model-matchmaker-release/`
+**All marketing/business content goes to:** a separate private directory outside this repo (e.g., `~/private-docs/model-matchmaker-release/`)
 
 This ensures the repo stays technical and doesn't accidentally expose business decisions to the public.
 

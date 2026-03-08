@@ -1,3 +1,8 @@
+---
+name: optimize-classifier
+description: Analyze your Model Matchmaker override patterns and tune the local classifier to match your preferences. Use after collecting 50+ recommendations.
+---
+
 # Optimize My Classifier
 
 This skill helps you personalize your Model Matchmaker classifier based on your actual usage patterns. After you've collected 50+ recommendations, this skill analyzes when you disagreed with the advisor and tunes your local classifier to match your preferences.

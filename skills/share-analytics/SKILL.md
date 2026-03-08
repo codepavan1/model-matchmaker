@@ -1,3 +1,8 @@
+---
+name: share-analytics
+description: Build a sanitized analytics report from your Model Matchmaker usage for community contribution. Optional; use optimize-classifier for private tuning instead.
+---
+
 # Share Model Matchmaker Analytics
 
 **OPTIONAL SKILL** - This is for contributing data back to the community. You don't need this for personal optimization. Use the `optimize-classifier` skill instead for private, local tuning.
